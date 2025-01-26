@@ -9,6 +9,13 @@
       rel="stylesheet"
       href="https://cdn.jsdelivr.net/npm/@exampledev/new.css@latest/new.min.css"
     />
+    <script>
+      document.addEventListener("DOMContentLoaded", function () {
+        const domain = window.location.hostname || "example.com";
+        const godaddyLink = document.querySelector('a[href*="godaddy.com"]');
+        godaddyLink.href = `https://www.godaddy.com/domainsearch/find?domainToCheck=${domain}`;
+      });
+    </script>
   </head>
   <body>
     <header>
@@ -22,9 +29,7 @@
     <p>This is a placeholder for a future project.</p>
     <p>
       Have another idea?
-      <a href="https://www.godaddy.com/domainsearch/find?domainToCheck=aweso.me"
-        >Buy the domain.</a
-      >
+      <a href="https://www.godaddy.com">Buy the domain.</a>
     </p>
     <a href="https://lineofflig.ht"
       ><img
