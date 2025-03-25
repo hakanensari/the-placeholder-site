@@ -14,6 +14,19 @@
         const domain = window.location.hostname || "example.com";
         const godaddyLink = document.querySelector('a[href*="godaddy.com"]');
         godaddyLink.href = `https://www.godaddy.com/en/domainsearch/find?domainToCheck=${domain}`;
+
+        // GoDaddy seems not to preserve query parameters when redirecting to a localized URL in (some?) mobile
+        // browsers. This hopefully works around that.
+        function isMobile() {
+          return /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+        }
+
+        if (isMobile()) {
+          godaddyLink.addEventListener("click", function (e) {
+            e.preventDefault();
+            window.location.href = godaddyLink.href;
+          });
+        }
       });
     </script>
   </head>
