@@ -1,0 +1,63 @@
+name: Sync Forks
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  sync-forks:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install dependencies
+        run: |
+          pip install pygithub
+
+      - name: Sync all organization forks
+        env:
+          GITHUB_TOKEN: ${{ secrets.ORG_PAT }}
+          ORGANIZATION: ${{ github.repository_owner }}
+          REPO_NAME: ${{ github.event.repository.name }}
+        run: |
+          python - <<EOF
+          import os
+          from github import Github
+
+          # Initialize GitHub API client
+          token = os.environ['GITHUB_TOKEN']
+          org_name = os.environ['ORGANIZATION']
+          repo_name = os.environ['REPO_NAME']
+          g = Github(token)
+
+          # Get organization and current repository
+          org = g.get_organization(org_name)
+          source_repo = g.get_repo(f"{org_name}/{repo_name}")
+
+          # Find all forks owned by the organization
+          print(f"Looking for forks of {org_name}/{repo_name} owned by {org_name}...")
+          for repo in org.get_repos():
+              if repo.fork and repo.source and repo.source.full_name == f"{org_name}/{repo_name}":
+                  print(f"Syncing fork: {repo.full_name}")
+                  try:
+                      # Create a merge from the parent's default branch to the fork's default branch
+                      merge_response = repo.merge(
+                          base=repo.default_branch,
+                          head=source_repo.default_branch,
+                          commit_message=f"Sync with upstream repository ({source_repo.full_name})"
+                      )
+                      print(f"Sync successful: {merge_response.sha}")
+                  except Exception as e:
+                      print(f"Error syncing {repo.full_name}: {str(e)}")
+
+          print("Fork sync process completed.")
+          EOF
