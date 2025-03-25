@@ -23,7 +23,7 @@ jobs:
         run: |
           pip install pygithub
 
-      - name: Sync all organization forks
+      - name: Sync all forks
         env:
           GITHUB_TOKEN: ${{ secrets.ORG_PAT }}
           ORGANIZATION: ${{ github.repository_owner }}
@@ -31,33 +31,75 @@ jobs:
         run: |
           python - <<EOF
           import os
+          import github
           from github import Github
 
-          # Initialize GitHub API client
-          token = os.environ['GITHUB_TOKEN']
-          org_name = os.environ['ORGANIZATION']
-          repo_name = os.environ['REPO_NAME']
-          g = Github(token)
+          def sync_fork(fork, base_repo):
+              try:
+                  # Get the head commit reference of the parent repository
+                  parent_branch = base_repo.default_branch
+                  parent_ref = base_repo.get_branch(parent_branch)
 
-          # Get organization and current repository
-          org = g.get_organization(org_name)
-          source_repo = g.get_repo(f"{org_name}/{repo_name}")
+                  if not parent_ref or not hasattr(parent_ref.commit, 'sha'):
+                      print(f"Error syncing {fork.full_name}: Parent repository reference is invalid")
+                      return
 
-          # Find all forks owned by the organization
-          print(f"Looking for forks of {org_name}/{repo_name} owned by {org_name}...")
-          for repo in org.get_repos():
-              if repo.fork and repo.source and repo.source.full_name == f"{org_name}/{repo_name}":
-                  print(f"Syncing fork: {repo.full_name}")
+                  print(f"Syncing fork: {fork.full_name}")
+
+                  # Get the fork's default branch
+                  fork_branch = fork.default_branch
+
+                  # Try updating the fork using git reference API
                   try:
-                      # Create a merge from the parent's default branch to the fork's default branch
-                      merge_response = repo.merge(
-                          base=repo.default_branch,
-                          head=source_repo.default_branch,
-                          commit_message=f"Sync with upstream repository ({source_repo.full_name})"
-                      )
-                      print(f"Sync successful: {merge_response.sha}")
-                  except Exception as e:
-                      print(f"Error syncing {repo.full_name}: {str(e)}")
+                      # First check if reference exists
+                      ref = fork.get_git_ref(f"heads/{fork_branch}")
+                      # Update existing reference
+                      ref.edit(parent_ref.commit.sha, force=True)
+                  except github.GithubException as e:
+                      if e.status == 404:  # Reference doesn't exist
+                          # Create new reference
+                          fork.create_git_ref(f"refs/heads/{fork_branch}", parent_ref.commit.sha)
+                      else:
+                          raise
 
-          print("Fork sync process completed.")
+                  print(f"Successfully synced {fork.full_name}")
+              except Exception as e:
+                  print(f"Error syncing {fork.full_name}: {str(e)}")
+
+          def main():
+              # Get authentication token
+              token = os.environ.get('GITHUB_TOKEN')
+              if not token:
+                  print("GITHUB_TOKEN environment variable is not set")
+                  return
+              repo_owner = os.environ['ORGANIZATION']
+              repo_name = repo_name = os.environ['REPO_NAME']
+              g = Github(token)
+
+              try:
+                  # Get base repository
+                  base_repo = g.get_repo(f"{repo_owner}/{repo_name}")
+
+                  # Find all forks owned by the same owner
+                  print(f"Looking for forks of {repo_owner}/{repo_name} owned by {repo_owner}...")
+
+                  # Get all forks of the repository
+                  forks = base_repo.get_forks()
+
+                  # Filter forks owned by the same user and sync them
+                  synced_count = 0
+                  for fork in forks:
+                      if fork.owner.login == repo_owner:
+                          sync_fork(fork, base_repo)
+                          synced_count += 1
+
+                  if synced_count == 0:
+                      print(f"No forks of {repo_owner}/{repo_name} owned by {repo_owner} were found.")
+              except Exception as e:
+                  print(f"Error: {str(e)}")
+              finally:
+                  print("Fork sync process completed.")
+
+          if __name__ == "__main__":
+              main()
           EOF
