@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - main
-  workflow_dispatch: # Allows manual triggering
 
 jobs:
   sync-forks:
@@ -14,28 +13,14 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.ORG_PAT }}
         run: |
-          # Extract owner and repo from GitHub context
-          GITHUB_REPOSITORY="${GITHUB_REPOSITORY:-${{ github.repository }}}"
-          OWNER=$(echo "$GITHUB_REPOSITORY" | cut -d '/' -f 1)
-          BASE_REPO=$(echo "$GITHUB_REPOSITORY" | cut -d '/' -f 2)
+          REPO="${{ github.repository }}"
+          OWNER="${REPO%/*}"
+          BASE_REPO="${REPO#*/}"
 
-          echo "Current repository: $OWNER/$BASE_REPO"
-          echo "Looking for forks of $OWNER/$BASE_REPO owned by $OWNER..."
+          FORKS=$(gh api repos/$OWNER/$BASE_REPO/forks --paginate |
+                  jq -r ".[] | select(.owner.login == \"$OWNER\") |
+                  .name")
 
-          # Get list of forks using GitHub CLI
-          FORKS=$(gh api repos/$OWNER/$BASE_REPO/forks --paginate | jq -r ".[] | select(.owner.login == \"$OWNER\") | .name")
-
-          # Check if we found any forks
-          if [ -z "$FORKS" ]; then
-            echo "No forks found for $OWNER/$BASE_REPO owned by $OWNER"
-            exit 0
-          fi
-
-          # Print found forks for logging
-          echo "Found the following forks to sync:"
-          echo "$FORKS" | tr ' ' '\n'
-
-          # Sync each fork
           echo "$FORKS" | while read -r fork; do
             if [ -n "$fork" ]; then
               echo "Syncing fork: $OWNER/$fork"
